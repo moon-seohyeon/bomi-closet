@@ -246,7 +246,10 @@ textarea{resize:vertical;min-height:60px}
 .cuthint{font-size:16px;color:var(--muted);margin:2px 0 0}
 .swatches{display:flex;flex-wrap:wrap;gap:6px}
 .sw{width:30px;height:30px;border-radius:50%;border:1px solid rgba(0,0,0,.2);padding:0}
+.sw{position:relative}
 .sw[aria-pressed="true"]{box-shadow:0 0 0 2px var(--paper),0 0 0 4px var(--cherry)}
+.sw[data-n]:not([data-n=""])::after{content:attr(data-n);position:absolute;right:-6px;top:-6px;background:var(--cherry);color:#fff;width:16px;height:16px;border-radius:50%;font-size:11px;line-height:16px;text-align:center}
+#fColorName{font-weight:400}
 .modal-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:8px}
 .modal-actions .left{margin-right:auto}
 .wishbox{background:#f6e3e1;border:1.5px dashed var(--rose);border-radius:6px;padding:12px;margin-bottom:14px}
@@ -412,6 +415,11 @@ footer.foot{display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px;m
 .rb-scallopsage .ribbon-band{transform:scaleY(-1);filter:drop-shadow(0 -1.5px 1.5px rgba(60,40,30,.22))}
 .tape.tickbrown{background:repeating-linear-gradient(90deg,#f3e8d4 0 7px,#8a6a52 7px 8.5px,#f3e8d4 8.5px 11px,#8a6a52 11px 12.5px,#f3e8d4 12.5px 20px)}
 .tape.tickred{background:repeating-linear-gradient(90deg,#f6efe2 0 7px,#b3474a 7px 8.5px,#f6efe2 8.5px 11px,#b3474a 11px 12.5px,#f6efe2 12.5px 20px)}
+#colorFilter{align-items:center;gap:8px}
+.csw{flex:none;width:28px;height:28px;border-radius:50%;border:2px solid var(--paper);box-shadow:0 0 0 1px rgba(110,84,68,.35);padding:0}
+.csw[aria-pressed="true"]{box-shadow:0 0 0 2.5px var(--cherry);transform:scale(1.08)}
+.cpick{flex:none;font-weight:700;font-size:16px;color:var(--cherry);margin-left:2px}
+@media (max-width:640px){.csw{width:32px;height:32px}}
 </style>
 </head>
 <body class="wp-sage">
@@ -542,7 +550,7 @@ footer.foot{display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px;m
       <input type="text" id="fName" maxlength="40" placeholder="예: 크림 꽈배기 니트" required>
     </div>
     <div class="field"><span class="lab">종류</span><div class="chips" id="fCat"></div></div>
-    <div class="field"><span class="lab">색 <span id="fColorName"></span></span><div class="swatches" id="fColor"></div></div>
+    <div class="field"><span class="lab">색 <span id="fColorName"></span></span><div class="swatches" id="fColor" style="gap:8px"></div></div>
     <div class="field"><span class="lab">계절 (여러 개 가능)</span><div class="chips" id="fSeason"></div></div>
     <div class="field"><button type="button" class="chip" id="fWish" aria-pressed="false">♡ 아직 안 산 옷 (위시리스트)</button></div>
     <div class="wishbox" id="wishBox" hidden>
@@ -591,6 +599,8 @@ const firebaseConfig={
   appId:"1:1095519512683:web:c380637f94825dead8692e"
 };
 const FBV="https://www.gstatic.com/firebasejs/10.12.2";
+// iPhone browsers other than Safari (Chrome, in-app browsers) cannot finish Google sign-in
+const IOS_OTHER=/iPhone|iPad|iPod/.test(navigator.userAgent)&&/CriOS|FxiOS|EdgiOS|KAKAOTALK|Instagram|NAVER|Line\//.test(navigator.userAgent);
 
 /* ===================== helpers ===================== */
 const $=s=>document.querySelector(s);
@@ -609,7 +619,17 @@ const CATNAME=Object.fromEntries(CATS);
 const LIMIT={outer:2,top:3,bottom:1,dress:1,hat:1,socks:1,shoes:1,bag:1,acc:6};
 const ORDER=["hat","outer","top","dress","bottom","socks","shoes","bag","acc"];
 const SEASONS=["봄","여름","가을","겨울"];
-const COLORS=[["블랙","#1a1a1a"],["화이트","#fbfbf8"],["그레이","#9b9b9b"],["아이보리","#efe7d6"],["베이지","#d6bf9b"],["브라운","#7a5233"],["네이비","#1f2a4d"],["블루","#3d6fd6"],["스카이","#a3cbef"],["데님","#4a6a8f"],["그린","#3f7d4e"],["카키","#6e6b3c"],["레드","#c8283a"],["버건디","#6d1b2b"],["핑크","#f1a7bd"],["퍼플","#7d5ba6"],["옐로","#f2cf4a"],["오렌지","#e97a2e"],["멀티","multi"]];
+const COLORS=[
+  ["블랙","#1a1a1a"],["차콜","#3e4149"],["그레이","#9b9b9b"],["라이트 그레이","#d6d6d6"],["화이트","#fbfbf8"],["아이보리","#f3ecd9"],["오트밀","#e3d9c4"],
+  ["베이지","#d6bf9b"],["샌드","#c9b08f"],["카멜","#c08a4a"],["브라운","#7a5233"],["다크 브라운","#4a3326"],
+  ["버건디","#6d1b2b"],["레드","#c8283a"],["오렌지","#e97a2e"],["머스타드","#d4a72c"],["옐로","#f2cf4a"],["라이트 옐로","#f6e39a"],
+  ["카키","#6e6b3c"],["올리브","#7c8a3e"],["그린","#3f7d4e"],["다크 그린","#23432f"],["민트","#8fd1bf"],
+  ["스카이 블루","#a3cbef"],["블루","#3d6fd6"],["데님","#4a6a8f"],["네이비","#1f2a4d"],
+  ["라벤더","#b6a2d6"],["퍼플","#7d5ba6"],["라이트 핑크","#f6c4cc"],["핑크","#ec8fb0"],["로즈","#b8486e"],
+  ["실버","linear-gradient(135deg,#f2f2f2,#a3a3a3 45%,#f4f4f4 60%,#8c8c8c)"],["골드","linear-gradient(135deg,#f6e3a1,#c9a13b 45%,#f8e7a8 60%,#b08a2e)"],
+  ["기타 색","conic-gradient(#c0392b,#f1c40f,#27ae60,#2980b9,#8e44ad,#c0392b)"]];
+const OLDCOLOR={"스카이":"스카이 블루","멀티":"기타 색"};
+const itemColors=it=>(it.colors&&it.colors.length?it.colors:(it.color?[it.color]:[])).map(c=>OLDCOLOR[c]||c);
 const COLORHEX=Object.fromEntries(COLORS);
 const BASE_TAGS=["데일리","학교","출근","데이트","모임","여행","면접"];
 const SKINS=[
@@ -803,7 +823,7 @@ function render(){
 function chipRow(host,opts,cur,onPick){
   host.replaceChildren(...opts.map(([k,label,n,dot])=>el("button",{type:"button",class:"chip","aria-pressed":String(cur===k),onclick:()=>onPick(k)},dot||null,label,n!=null?el("span",{class:"n",text:n}):null)));
 }
-const colorDot=n=>{const h=COLORHEX[n];if(!h)return null;return h==="multi"?el("span",{class:"dot multi"}):el("span",{class:"dot",style:"background:"+h});};
+const colorDot=n=>{const h=COLORHEX[n];if(!h)return null;return el("span",{class:"dot",style:"background:"+h});};
 
 /* ===================== closet ===================== */
 function renderCloset(){
@@ -814,13 +834,19 @@ function renderCloset(){
   const base=sortedItems().filter(i=>f.own==="wish"?i.wish:!i.wish);
   chipRow($("#catFilter"),[["all","전체",base.length],...CATS.map(([k,l])=>[k,l,base.filter(i=>i.cat===k).length]).filter(o=>o[2]>0||o[0]===f.cat)],f.cat,k=>{f.cat=k;f.color=null;render();});
   const inCat=base.filter(i=>f.cat==="all"||i.cat===f.cat);
-  const colorsHere=COLORS.map(([n])=>n).filter(n=>inCat.some(i=>i.color===n));
+  const colorsHere=COLORS.map(([n])=>n).filter(n=>inCat.some(i=>itemColors(i).includes(n)));
   const cf=$("#colorFilter");
   if(!colorsHere.length){cf.replaceChildren(el("span",{class:"flabel",text:"색을 정해 둔 옷이 없어요"}));}
-  else chipRow(cf,[[null,"전체"],...colorsHere.map(n=>[n,n,inCat.filter(i=>i.color===n).length,colorDot(n)])],f.color,k=>{f.color=k;render();});
+  else{
+    const cnt=n=>inCat.filter(i=>itemColors(i).includes(n)).length;
+    cf.replaceChildren(
+      el("button",{type:"button",class:"chip","aria-pressed":String(!f.color),onclick:()=>{f.color=null;render();}},"전체"),
+      ...colorsHere.map(n=>el("button",{type:"button",class:"csw",style:"background:"+COLORHEX[n],title:n+" "+cnt(n)+"벌","aria-label":n+" "+cnt(n)+"벌","aria-pressed":String(f.color===n),onclick:()=>{f.color=f.color===n?null:n;render();}})),
+      f.color?el("span",{class:"cpick",text:f.color+" · "+cnt(f.color)+"벌"}):null);
+  }
   chipRow($("#seasonFilter"),[[null,"전체"],...SEASONS.map(s=>[s,s])],f.season,k=>{f.season=k;render();});
   const q=f.q.trim().toLowerCase();
-  const list=inCat.filter(i=>(!f.color||i.color===f.color)&&(!f.season||!(i.seasons||[]).length||(i.seasons||[]).includes(f.season))&&(!q||(i.name+" "+(i.memo||"")+" "+(i.color||"")).toLowerCase().includes(q)));
+  const list=inCat.filter(i=>(!f.color||itemColors(i).includes(f.color))&&(!f.season||!(i.seasons||[]).length||(i.seasons||[]).includes(f.season))&&(!q||(i.name+" "+(i.memo||"")+" "+itemColors(i).join(" ")).toLowerCase().includes(q)));
   const g=$("#closetGrid");
   if(!base.length){
     g.replaceChildren(f.own==="wish"
@@ -833,7 +859,7 @@ function renderCloset(){
     it.wish?el("span",{class:"ribbon",text:it.price?won(it.price):"♡ 위시"}):null,
     el("div",{class:"ph"},photo(it)),
     el("div",{class:"name",text:it.name}),
-    el("div",{class:"sub"},colorDot(it.color),el("span",{text:(CATNAME[it.cat]||"")+(it.color?" · "+it.color:"")}),
+    el("div",{class:"sub"},...itemColors(it).map(colorDot),el("span",{text:(CATNAME[it.cat]||"")+(itemColors(it).length?" · "+itemColors(it).join("/"):"")}),
       ...(it.seasons||[]).map(s=>el("span",{class:"season",text:s})),
       wc[it.id]?el("span",{text:"· "+wc[it.id]+"번 입음"}):null))));
 }
@@ -1145,8 +1171,9 @@ document.addEventListener("keydown",e=>{if(e.key==="Escape")document.querySelect
 
 function renderItemForm(){
   chipRow($("#fCat"),CATS.map(([k,l])=>[k,l]),F.cat,k=>{F.cat=k;renderItemForm();});
-  $("#fColor").replaceChildren(...COLORS.map(([n,h])=>el("button",{type:"button",class:"sw"+(h==="multi"?" dot multi":""),style:h!=="multi"?"background:"+h:null,"aria-pressed":String(F.color===n),"aria-label":n,title:n,onclick:()=>{F.color=F.color===n?null:n;renderItemForm();}})));
-  $("#fColorName").textContent=F.color?"· "+F.color:"";
+  $("#fColor").replaceChildren(...COLORS.map(([n,h])=>{const on=F.colors.indexOf(n);return el("button",{type:"button",class:"sw",style:"background:"+h,"aria-pressed":String(on>=0),"aria-label":n,title:n,"data-n":on>=0&&F.colors.length>1?String(on+1):"",
+    onclick:()=>{if(on>=0)F.colors.splice(on,1);else{if(F.colors.length>=3){toast("색은 3개까지 고를 수 있어요");return;}F.colors.push(n);}renderItemForm();}});}));
+  $("#fColorName").textContent=F.colors.length?"· "+F.colors.join(" / "):"(섞인 색이면 3개까지)";
   $("#fSeason").replaceChildren(...SEASONS.map(s=>el("button",{type:"button",class:"chip","aria-pressed":String(F.seasons.includes(s)),onclick:()=>{F.seasons=F.seasons.includes(s)?F.seasons.filter(x=>x!==s):[...F.seasons,s];renderItemForm();}},s)));
   $("#fWish").setAttribute("aria-pressed",String(F.wish));
   $("#wishBox").hidden=!F.wish;
@@ -1187,7 +1214,7 @@ $("#undoCut").onclick=()=>{
 function openItem(id,wish){
   const it=id&&S.items.get(id);
   const defCat=S.f.cat!=="all"?S.f.cat:"top";
-  F={id:it?it.id:null,cat:it?it.cat:defCat,color:it?it.color||null:null,seasons:it?[...(it.seasons||[])]:[],wish:it?!!it.wish:(wish!=null?wish:S.f.own==="wish"),blob:null,srcBlob:null,cut:false,existing:it||null};
+  F={id:it?it.id:null,cat:it?it.cat:defCat,colors:it?itemColors(it):[],seasons:it?[...(it.seasons||[])]:[],wish:it?!!it.wish:(wish!=null?wish:S.f.own==="wish"),blob:null,srcBlob:null,cut:false,existing:it||null};
   setCutState(false);$("#tol").value=28;
   $("#itemTitle").textContent=it?"옷 정보 고치기":(F.wish?"위시 옷 추가":"옷 추가");
   $("#fName").value=it?it.name:"";$("#fMemo").value=it?it.memo||"":"";
@@ -1246,7 +1273,7 @@ async function saveItemFromForm(forceOwned){
     const id=F.id||uidGen("i");
     const wish=forceOwned?false:F.wish;
     const price=Number($("#fPrice").value)||null,link=($("#fLink").value||"").trim();
-    const d={name,cat:F.cat,color:F.color,seasons:F.seasons,memo:$("#fMemo").value.trim(),thumb,wish,createdAt:ex?ex.createdAt:Date.now()};
+    const d={name,cat:F.cat,color:F.colors[0]||null,colors:F.colors.slice(),seasons:F.seasons,memo:$("#fMemo").value.trim(),thumb,wish,createdAt:ex?ex.createdAt:Date.now()};
     if(price)d.price=price;if(link)d.link=link;
     if(forceOwned)d.boughtAt=Date.now();
     await B.saveItem(id,d);
@@ -1323,16 +1350,17 @@ function showApp(){$("#loading").hidden=true;$("#gate").hidden=true;$("#app").hi
     banner("미리보기 모드예요. 여기서 넣은 옷은 이 브라우저에만 저장되고, 진짜 사이트(netlify)에는 안 넘어가요.");
     return;
   }
-  const {GoogleAuthProvider,signInWithPopup,signInWithRedirect,onAuthStateChanged,signOut}=FB.authM;
+  const {GoogleAuthProvider,signInWithPopup,onAuthStateChanged,signOut}=FB.authM;
   $("#loginBtn").onclick=async()=>{
     const p=new GoogleAuthProvider();p.setCustomParameters({prompt:"select_account"});
     try{await signInWithPopup(FB.auth,p);}
     catch(e){
-      if(e.code==="auth/popup-blocked"||e.code==="auth/operation-not-supported-in-this-environment"){await signInWithRedirect(FB.auth,p);return;}
+      if(e.code==="auth/popup-blocked"||e.code==="auth/operation-not-supported-in-this-environment"||e.code==="auth/web-storage-unsupported"){$("#gateMsg").textContent=IOS_OTHER?"아이폰에서는 사파리로 열어야 로그인돼요. 주소를 복사해서 사파리에 붙여넣어 주세요.":"로그인 창이 막혔어요. 팝업 차단을 풀고 다시 눌러 주세요.";return;}
       if(e.code==="auth/unauthorized-domain"){$("#gateMsg").textContent="이 사이트 주소가 Firebase에 등록되지 않았어요. Authentication → 설정 → 승인된 도메인에 주소를 추가해 주세요.";return;}
       if(e.code!=="auth/popup-closed-by-user"&&e.code!=="auth/cancelled-popup-request")$("#gateMsg").textContent="로그인하지 못했어요 ("+e.code+")";
     }
   };
+  if(IOS_OTHER)$("#gateMsg").textContent="아이폰에서는 사파리로 열어야 구글 로그인이 돼요. 이 주소를 복사해서 사파리에 붙여넣어 주세요.";
   $("#logoutBtn").hidden=false;
   $("#logoutBtn").onclick=()=>signOut(FB.auth);
   onAuthStateChanged(FB.auth,u=>{
