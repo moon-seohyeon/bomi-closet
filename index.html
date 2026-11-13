@@ -842,7 +842,7 @@ function renderCloset(){
     cf.replaceChildren(
       el("button",{type:"button",class:"chip","aria-pressed":String(!f.color),onclick:()=>{f.color=null;render();}},"전체"),
       ...colorsHere.map(n=>el("button",{type:"button",class:"csw",style:"background:"+COLORHEX[n],title:n+" "+cnt(n)+"벌","aria-label":n+" "+cnt(n)+"벌","aria-pressed":String(f.color===n),onclick:()=>{f.color=f.color===n?null:n;render();}})),
-      f.color?el("span",{class:"cpick",text:f.color+" · "+cnt(f.color)+"벌"}):null);
+      ...(f.color?[el("span",{class:"cpick",text:f.color+" · "+cnt(f.color)+"벌"})]:[]));
   }
   chipRow($("#seasonFilter"),[[null,"전체"],...SEASONS.map(s=>[s,s])],f.season,k=>{f.season=k;render();});
   const q=f.q.trim().toLowerCase();
