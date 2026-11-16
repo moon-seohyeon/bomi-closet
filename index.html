@@ -450,6 +450,10 @@ footer.foot{display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px;m
 .tag>.tagbtn{position:absolute;top:-12px;left:50%;width:30px;height:30px;margin-left:-15px;z-index:2}
 .polaroid>.tagbtn{position:absolute;top:-14px;left:50%;width:34px;height:34px;margin-left:-17px;z-index:2}
 .eyebrow .tb{width:22px;height:22px;vertical-align:-5px;margin-right:2px}
+.sortsel{width:auto;padding:5px 30px 5px 12px;border:1.5px dashed var(--kraft-d);border-radius:999px;background:var(--paper);font-size:16px;-webkit-appearance:none;appearance:none;
+  background-image:linear-gradient(45deg,transparent 50%,var(--cocoa) 50%),linear-gradient(135deg,var(--cocoa) 50%,transparent 50%);background-position:calc(100% - 16px) 55%,calc(100% - 11px) 55%;background-size:5px 5px;background-repeat:no-repeat}
+.pickrow{margin:8px 0 0}
+.pickrow .chips{flex-wrap:wrap}
 </style>
 </head>
 <body class="wp-sage">
@@ -503,7 +507,9 @@ footer.foot{display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px;m
     </div>
     <div class="toolbar"><span class="flabel">종류</span><div class="chips" id="catFilter"></div></div>
     <div class="toolbar"><span class="flabel">색</span><div class="chips" id="colorFilter"></div></div>
+    <div class="toolbar" id="lenFilter" hidden></div>
     <div class="toolbar"><span class="flabel">계절</span><div class="chips" id="seasonFilter"></div></div>
+    <div class="toolbar"><span class="flabel">정렬</span><select id="sortSel" class="sortsel" aria-label="정렬"></select></div>
     <div id="closetGrid" class="grid"></div>
   </section>
 
@@ -531,6 +537,8 @@ footer.foot{display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px;m
       <div class="panel">
         <div class="panel-head o5"><h2>옷 고르기</h2><button type="button" class="chip" id="wishToggle" aria-pressed="false">♡ 위시도 보기</button></div>
         <div class="chips o6" id="pickCat"></div>
+        <div class="toolbar o6 pickrow" id="pickLen" hidden></div>
+        <div class="toolbar o6 pickrow"><span class="flabel">정렬</span><select id="pickSort" class="sortsel" aria-label="옷 고르기 정렬"></select></div>
         <div class="picker o7" id="picker"></div>
       </div>
     </div>
@@ -580,6 +588,7 @@ footer.foot{display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px;m
       <input type="text" id="fName" maxlength="40" placeholder="예: 크림 꽈배기 니트" required>
     </div>
     <div class="field"><span class="lab">종류</span><div class="chips" id="fCat"></div></div>
+    <div class="field" id="fLenWrap" hidden><span class="lab" id="fLenLab">길이</span><div class="chips" id="fLen"></div></div>
     <div class="field"><span class="lab">색 <span id="fColorName"></span></span><div class="swatches" id="fColor" style="gap:8px"></div></div>
     <div class="field"><span class="lab">계절 (여러 개 가능)</span><div class="chips" id="fSeason"></div></div>
     <div class="field"><button type="button" class="chip" id="fWish" aria-pressed="false">♡ 아직 안 산 옷 (위시리스트)</button></div>
@@ -644,10 +653,33 @@ function todayStr(){const d=new Date();return d.getFullYear()+"-"+String(d.getMo
 const won=n=>Number(n).toLocaleString("ko-KR")+"원";
 
 /* ===================== constants ===================== */
-const CATS=[["outer","아우터"],["top","상의"],["bottom","하의"],["dress","원피스"],["hat","모자"],["socks","양말"],["shoes","신발"],["bag","가방"],["acc","액세서리"]];
+const CATS=[["outer","아우터"],["top","상의"],["bottom","바지"],["skirt","치마"],["dress","원피스"],["hat","모자"],["socks","양말"],["shoes","신발"],["bag","가방"],["acc","액세서리"]];
 const CATNAME=Object.fromEntries(CATS);
-const LIMIT={outer:2,top:3,bottom:1,dress:1,hat:1,socks:1,shoes:1,bag:1,acc:6};
-const ORDER=["hat","outer","top","dress","bottom","socks","shoes","bag","acc"];
+const LENS={top:["민소매","반팔","긴팔"],bottom:["반바지","7부","긴바지"],skirt:["미니","미디","롱"]};
+const LENWORD={top:"소매",bottom:"기장",skirt:"기장"};
+const lenRank=it=>{const L=LENS[it.cat];return L&&it.len?L.indexOf(it.len):-1;};
+const SORTS=[["new","최신순"],["old","오래된 순"],["long","긴 것부터"],["short","짧은 것부터"],["name","이름순"]];
+function sortList(arr,how){
+  const a=arr.slice();
+  if(how==="old")a.sort((x,y)=>(x.createdAt||0)-(y.createdAt||0));
+  else if(how==="name")a.sort((x,y)=>String(x.name).localeCompare(String(y.name),"ko"));
+  else if(how==="long"||how==="short"){const d=how==="long"?-1:1;a.sort((x,y)=>{const rx=lenRank(x),ry=lenRank(y);if(rx<0&&ry<0)return 0;if(rx<0)return 1;if(ry<0)return -1;return d*(rx-ry);});}
+  return a;
+}
+function lenChips(host,items,cat,cur,onPick){
+  const L=LENS[cat];
+  if(!L){host.hidden=true;host.replaceChildren();return;}
+  host.hidden=false;
+  const inC=items.filter(i=>i.cat===cat);
+  const unset=inC.filter(i=>!i.len||!L.includes(i.len)).length;
+  const lab=host.querySelector(".flabel")||null;
+  host.replaceChildren(el("span",{class:"flabel",text:LENWORD[cat]}),el("div",{class:"chips"},
+    ...[[null,"전체",inC.length],...L.map(x=>[x,x,inC.filter(i=>i.len===x).length]),...(unset?[["__none","미정",unset]]:[])].map(([k,label,n])=>
+      el("button",{type:"button",class:"chip","aria-pressed":String(cur===k),onclick:()=>onPick(k)},label,el("span",{class:"n",text:n})))));
+}
+const lenMatch=(i,len)=>!len||(len==="__none"?!(i.len&&(LENS[i.cat]||[]).includes(i.len)):i.len===len);
+const LIMIT={outer:2,top:3,bottom:1,skirt:1,dress:1,hat:1,socks:1,shoes:1,bag:1,acc:6};
+const ORDER=["hat","outer","top","dress","bottom","skirt","socks","shoes","bag","acc"];
 const SEASONS=["봄","여름","가을","겨울"];
 const COLORS=[
   ["블랙","#1a1a1a"],["차콜","#3e4149"],["그레이","#9b9b9b"],["라이트 그레이","#d6d6d6"],["화이트","#fbfbf8"],["아이보리","#f3ecd9"],["오트밀","#e3d9c4"],
@@ -674,8 +706,8 @@ const BTN_N=24;
 const btnFor=id=>{let h=2166136261;for(const c of String(id)){h^=c.charCodeAt(0);h=Math.imul(h,16777619)>>>0;}h^=h>>>13;h=Math.imul(h,1274126177)>>>0;h^=h>>>16;return "tb tb"+((h>>>0)%BTN_N);};
 const emptyBoard=()=>({sel:Object.fromEntries(CATS.map(([k])=>[k,[]])),layout:{}});
 const S={items:new Map(),looks:new Map(),view:"closet",
-  f:{own:"own",cat:"all",color:null,season:null,q:""},
-  pickCat:"all",pickWish:false,randSeason:null,lookTag:null,
+  f:{own:"own",cat:"all",color:null,season:null,q:"",len:null,sort:"new"},
+  pickCat:"all",pickLen:null,pickSort:"new",pickWish:false,randSeason:null,lookTag:null,
   board:emptyBoard(),mode:ls.get("closet-mode","block"),freeSel:null,editingLook:null};
 let B=null;
 
@@ -864,7 +896,10 @@ function renderCloset(){
     el("button",{type:"button","aria-pressed":String(f.own==="own"),onclick:()=>{f.own="own";f.color=null;render();}},"내 옷"),
     el("button",{type:"button","aria-pressed":String(f.own==="wish"),onclick:()=>{f.own="wish";f.color=null;render();}},"♡ 위시리스트"));
   const base=sortedItems().filter(i=>f.own==="wish"?i.wish:!i.wish);
-  chipRow($("#catFilter"),[["all","전체",base.length],...CATS.map(([k,l])=>[k,l,base.filter(i=>i.cat===k).length]).filter(o=>o[2]>0||o[0]===f.cat)],f.cat,k=>{f.cat=k;f.color=null;render();});
+  chipRow($("#catFilter"),[["all","전체",base.length],...CATS.map(([k,l])=>[k,l,base.filter(i=>i.cat===k).length]).filter(o=>o[2]>0||o[0]===f.cat)],f.cat,k=>{f.cat=k;f.color=null;f.len=null;render();});
+  lenChips($("#lenFilter"),base,f.cat,f.len,k=>{f.len=k;render();});
+  const ss=$("#sortSel");if(!ss.options.length){SORTS.forEach(([k,l])=>ss.append(el("option",{value:k,text:l})));ss.onchange=()=>{f.sort=ss.value;render();};}
+  ss.value=f.sort;
   const inCat=base.filter(i=>f.cat==="all"||i.cat===f.cat);
   const colorsHere=COLORS.map(([n])=>n).filter(n=>inCat.some(i=>itemColors(i).includes(n)));
   const cf=$("#colorFilter");
@@ -878,7 +913,7 @@ function renderCloset(){
   }
   chipRow($("#seasonFilter"),[[null,"전체"],...SEASONS.map(s=>[s,s])],f.season,k=>{f.season=k;render();});
   const q=f.q.trim().toLowerCase();
-  const list=inCat.filter(i=>(!f.color||itemColors(i).includes(f.color))&&(!f.season||!(i.seasons||[]).length||(i.seasons||[]).includes(f.season))&&(!q||(i.name+" "+(i.memo||"")+" "+itemColors(i).join(" ")).toLowerCase().includes(q)));
+  const list=sortList(inCat.filter(i=>lenMatch(i,f.len)&&(!f.color||itemColors(i).includes(f.color))&&(!f.season||!(i.seasons||[]).length||(i.seasons||[]).includes(f.season))&&(!q||(i.name+" "+(i.memo||"")+" "+itemColors(i).join(" ")).toLowerCase().includes(q))),f.sort);
   const g=$("#closetGrid");
   if(!base.length){
     g.replaceChildren(f.own==="wish"
@@ -892,7 +927,7 @@ function renderCloset(){
     it.wish?el("span",{class:"ribbon",text:it.price?won(it.price):"♡ 위시"}):null,
     el("div",{class:"ph"},photo(it)),
     el("div",{class:"name",text:it.name}),
-    el("div",{class:"sub"},...itemColors(it).map(colorDot),el("span",{text:(CATNAME[it.cat]||"")+(itemColors(it).length?" · "+itemColors(it).join("/"):"")}),
+    el("div",{class:"sub"},...itemColors(it).map(colorDot),el("span",{text:(CATNAME[it.cat]||"")+(it.len&&(LENS[it.cat]||[]).includes(it.len)?" "+it.len:"")+(itemColors(it).length?" · "+itemColors(it).join("/"):"")}),
       ...(it.seasons||[]).map(s=>el("span",{class:"season",text:s})),
       wc[it.id]?el("span",{text:"· "+wc[it.id]+"번 입음"}):null))));
 }
@@ -908,15 +943,16 @@ function placeItem(id){
     if(LIMIT[k]===1)clearCat(k);
     S.board.sel[k].push(id);
     if(S.board.sel[k].length>LIMIT[k]){const r=S.board.sel[k].shift();delete S.board.layout[r];toast(CATNAME[k]+"는 "+LIMIT[k]+"개까지 올릴 수 있어요");}
-    if(k==="dress")clearCat("bottom");
-    if(k==="bottom")clearCat("dress");
+    // one lower piece at a time: trousers, skirt or dress
+    const LOWER=["dress","bottom","skirt"];
+    if(LOWER.includes(k))LOWER.filter(x=>x!==k).forEach(clearCat);
     if(S.mode==="free")S.freeSel=id;
   }
   render();
 }
 /* where each kind of clothing lands on the free board: centre x%, centre y%, width% */
-const BASE={hat:[50,9,22],outer:[34,36,46],top:[56,33,38],dress:[55,48,42],bottom:[55,64,34],socks:[27,88,14],shoes:[54,89,28],bag:[84,64,24],acc:[84,15,13]};
-const ZBASE={outer:10,bottom:20,top:30,dress:28,hat:40,bag:45,socks:50,shoes:55,acc:60};
+const BASE={hat:[50,9,22],outer:[34,36,46],top:[56,33,38],dress:[55,48,42],bottom:[55,64,34],skirt:[55,62,36],socks:[27,88,14],shoes:[54,89,28],bag:[84,64,24],acc:[84,15,13]};
+const ZBASE={outer:10,bottom:20,skirt:20,top:30,dress:28,hat:40,bag:45,socks:50,shoes:55,acc:60};
 function autoPos(k,i,n){
   let [x,y,w]=BASE[k];let z=ZBASE[k];
   if(k==="top"){x+=i*7;y+=i*2;z+=n-i;if(!S.board.sel.outer.length)x-=6;}
@@ -972,14 +1008,14 @@ function renderBlock(){
         if(n>1)stack.append(el("span",{class:"badge",style:"left:calc("+(i*off)+"% + 2px)",text:String(i+1)}));});
     }
     return el("div",{class:"slot"+(filled?" filled":"")+(area==="acc"?" acc-wrap":""),style:"grid-area:"+area,role:"button",tabindex:"0","aria-label":label+" 칸",
-      onclick:e=>{if(e.target.closest(".sbtn"))return;S.pickCat=k0;render();},onkeydown:e=>{if(e.key==="Enter"){S.pickCat=k0;render();}}},
+      onclick:e=>{if(e.target.closest(".sbtn"))return;S.pickCat=k0;S.pickLen=null;render();},onkeydown:e=>{if(e.key==="Enter"){S.pickCat=k0;render();}}},
       filled?stack:el("span",{class:"lbl",text:label}),
       filled&&multi&&ids.length>1?el("button",{type:"button",class:"sbtn ord",title:"겹치는 순서 바꾸기","aria-label":label+" 순서 바꾸기",text:"⇄",onclick:()=>{const a=b[k0];a.push(a.shift());render();}}):null,
       filled?el("button",{type:"button",class:"sbtn x","aria-label":label+" 빼기",text:"✕",onclick:()=>{cats.forEach(clearCat);render();}}):null);
   };
   host.replaceChildren(
     cell("outer",["outer"],"아우터",true),cell("hat",["hat"],"모자"),cell("top",["top"],"상의",true),
-    cell("bottom",["dress","bottom"],"하의·원피스"),cell("socks",["socks"],"양말"),cell("shoes",["shoes"],"신발"),
+    cell("bottom",["dress","bottom","skirt"],"바지·치마·원피스"),cell("socks",["socks"],"양말"),cell("shoes",["shoes"],"신발"),
     cell("acc",["acc"],"액세서리"),cell("bag",["bag"],"가방"));
 }
 function freeItems(host,ids,layout,interactive){
@@ -1053,8 +1089,11 @@ boardHost.addEventListener("pointercancel",endDrag);
 function renderPicker(){
   const all=sortedItems().filter(i=>S.pickWish||!i.wish);
   $("#wishToggle").setAttribute("aria-pressed",String(S.pickWish));
-  chipRow($("#pickCat"),[["all","전체",all.length],...CATS.map(([k,l])=>[k,l,all.filter(i=>i.cat===k).length])],S.pickCat,k=>{S.pickCat=k;render();});
-  const list=all.filter(i=>S.pickCat==="all"||i.cat===S.pickCat);
+  chipRow($("#pickCat"),[["all","전체",all.length],...CATS.map(([k,l])=>[k,l,all.filter(i=>i.cat===k).length])],S.pickCat,k=>{S.pickCat=k;S.pickLen=null;render();});
+  lenChips($("#pickLen"),all,S.pickCat,S.pickLen,k=>{S.pickLen=k;render();});
+  const ps=$("#pickSort");if(!ps.options.length){SORTS.forEach(([k,l])=>ps.append(el("option",{value:k,text:l})));ps.onchange=()=>{S.pickSort=ps.value;render();};}
+  ps.value=S.pickSort;
+  const list=sortList(all.filter(i=>(S.pickCat==="all"||i.cat===S.pickCat)&&lenMatch(i,S.pickLen)),S.pickSort);
   const p=$("#picker");
   if(!S.items.size){p.replaceChildren(el("div",{class:"empty",style:"grid-column:1/-1"},el("p",{text:"옷장에 옷을 먼저 추가해 주세요."}),el("a",{class:"btn red",href:"#closet",style:"text-decoration:none"},"옷장으로 가기")));return;}
   if(!list.length){p.replaceChildren(el("div",{class:"empty",style:"grid-column:1/-1;padding:24px"},el("p",{style:"margin:0",text:(CATNAME[S.pickCat]||"이 종류")+" 옷이 아직 없어요."})));return;}
@@ -1071,13 +1110,13 @@ function randomLook(opt={}){
   const pool=c=>owned().filter(i=>i.cat===c&&(!seasons||!(i.seasons||[]).length||(i.seasons||[]).some(s=>seasons.includes(s))));
   const pick=a=>a.length?a[Math.floor(Math.random()*a.length)].id:null;
   const nb=emptyBoard();const put=(k,id)=>{if(id)nb.sel[k].push(id);};
-  const tops=pool("top"),bots=pool("bottom"),dresses=pool("dress");
+  const tops=pool("top"),bots=[...pool("bottom"),...pool("skirt")],dresses=pool("dress");
   const useDress=dresses.length&&(!(tops.length&&bots.length)||Math.random()<.3);
   if(useDress)put("dress",pick(dresses));
   else{
     put("top",pick(tops));
     if(opt.layer&&tops.length>1&&Math.random()<.5){const second=pick(tops.filter(t=>t.id!==nb.sel.top[0]));put("top",second);}
-    put("bottom",pick(bots));
+    {const bid=pick(bots);if(bid)put(S.items.get(bid).cat,bid);}
   }
   const outers=pool("outer");
   const wantOuter=opt.outer!=null?opt.outer:(seasons&&seasons.includes("겨울"))||(!seasons||!seasons.includes("여름"))&&Math.random()<.5;
@@ -1203,7 +1242,9 @@ document.querySelectorAll(".overlay").forEach(o=>o.addEventListener("click",e=>{
 document.addEventListener("keydown",e=>{if(e.key==="Escape")document.querySelectorAll(".overlay.open").forEach(closeOverlay);});
 
 function renderItemForm(){
-  chipRow($("#fCat"),CATS.map(([k,l])=>[k,l]),F.cat,k=>{F.cat=k;renderItemForm();});
+  chipRow($("#fCat"),CATS.map(([k,l])=>[k,l]),F.cat,k=>{F.cat=k;if(!(LENS[k]||[]).includes(F.len))F.len=null;renderItemForm();});
+  const LL=LENS[F.cat];$("#fLenWrap").hidden=!LL;
+  if(LL){$("#fLenLab").textContent=LENWORD[F.cat]+" 길이";chipRow($("#fLen"),LL.map(x=>[x,x]),F.len,k=>{F.len=F.len===k?null:k;renderItemForm();});}
   $("#fColor").replaceChildren(...COLORS.map(([n,h])=>{const on=F.colors.indexOf(n);return el("button",{type:"button",class:"sw",style:"background:"+h,"aria-pressed":String(on>=0),"aria-label":n,title:n,"data-n":on>=0&&F.colors.length>1?String(on+1):"",
     onclick:()=>{if(on>=0)F.colors.splice(on,1);else{if(F.colors.length>=3){toast("색은 3개까지 고를 수 있어요");return;}F.colors.push(n);}renderItemForm();}});}));
   $("#fColorName").textContent=F.colors.length?"· "+F.colors.join(" / "):"(섞인 색이면 3개까지)";
@@ -1247,7 +1288,7 @@ $("#undoCut").onclick=()=>{
 function openItem(id,wish){
   const it=id&&S.items.get(id);
   const defCat=S.f.cat!=="all"?S.f.cat:"top";
-  F={id:it?it.id:null,cat:it?it.cat:defCat,colors:it?itemColors(it):[],seasons:it?[...(it.seasons||[])]:[],wish:it?!!it.wish:(wish!=null?wish:S.f.own==="wish"),blob:null,srcBlob:null,cut:false,existing:it||null};
+  F={id:it?it.id:null,len:it?it.len||null:null,cat:it?it.cat:defCat,colors:it?itemColors(it):[],seasons:it?[...(it.seasons||[])]:[],wish:it?!!it.wish:(wish!=null?wish:S.f.own==="wish"),blob:null,srcBlob:null,cut:false,existing:it||null};
   setCutState(false);$("#tol").value=28;
   $("#itemTitle").textContent=it?"옷 정보 고치기":(F.wish?"위시 옷 추가":"옷 추가");
   $("#fName").value=it?it.name:"";$("#fMemo").value=it?it.memo||"":"";
@@ -1306,7 +1347,7 @@ async function saveItemFromForm(forceOwned){
     const id=F.id||uidGen("i");
     const wish=forceOwned?false:F.wish;
     const price=Number($("#fPrice").value)||null,link=($("#fLink").value||"").trim();
-    const d={name,cat:F.cat,color:F.colors[0]||null,colors:F.colors.slice(),seasons:F.seasons,memo:$("#fMemo").value.trim(),thumb,wish,createdAt:ex?ex.createdAt:Date.now()};
+    const d={name,cat:F.cat,len:(LENS[F.cat]||[]).includes(F.len)?F.len:null,color:F.colors[0]||null,colors:F.colors.slice(),seasons:F.seasons,memo:$("#fMemo").value.trim(),thumb,wish,createdAt:ex?ex.createdAt:Date.now()};
     if(price)d.price=price;if(link)d.link=link;
     if(forceOwned)d.boughtAt=Date.now();
     await B.saveItem(id,d);
